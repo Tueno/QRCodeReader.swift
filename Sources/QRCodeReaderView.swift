@@ -24,17 +24,16 @@
  *
  */
 
+import AVFoundation
 import UIKit
 
 final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
-  public lazy var overlayView: QRCodeReaderViewOverlay? = {
-    let ov = ReaderOverlayView()
+  public lazy var overlayLayer: QRCodeReaderViewOverlay? = {
+    let ol = ReaderOverlayLayer()
+    ol.backgroundColor                           = UIColor.clear.cgColor
+    ol.masksToBounds                             = true
 
-    ov.backgroundColor                           = .clear
-    ov.clipsToBounds                             = true
-    ov.translatesAutoresizingMaskIntoConstraints = false
-
-    return ov
+    return ol
   }()
 
   public let cameraView: UIView = {
@@ -72,9 +71,13 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
   }()
 
   private weak var reader: QRCodeReader?
+  private var rectOfInterest: CGRect?
+
+  public var cameraDimensions: CMVideoDimensions?
 
   public func setupComponents(with builder: QRCodeReaderViewControllerBuilder) {
     self.reader               = builder.reader
+    self.rectOfInterest     = builder.rectOfInterest
     reader?.lifeCycleDelegate = self
 
     addComponents()
@@ -82,11 +85,11 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
     cancelButton?.isHidden       = !builder.showCancelButton
     switchCameraButton?.isHidden = !builder.showSwitchCameraButton
     toggleTorchButton?.isHidden  = !builder.showTorchButton
-    overlayView?.isHidden        = !builder.showOverlayView
+    overlayLayer?.isHidden        = !builder.showOverlayView
 
-    guard let cb = cancelButton, let scb = switchCameraButton, let ttb = toggleTorchButton, let ov = overlayView else { return }
+    guard let cb = cancelButton, let scb = switchCameraButton, let ttb = toggleTorchButton else { return }
 
-    let views = ["cv": cameraView, "ov": ov, "cb": cb, "scb": scb, "ttb": ttb]
+    let views = ["cv": cameraView, "cb": cb, "scb": scb, "ttb": ttb]
 
     addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[cv]|", options: [], metrics: nil, views: views))
 
@@ -107,46 +110,36 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-[ttb(50)]", options: [], metrics: nil, views: views))
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[ttb(70)]", options: [], metrics: nil, views: views))
     }
-
-    for attribute in Array<NSLayoutConstraint.Attribute>([.left, .top, .right, .bottom]) {
-      addConstraint(NSLayoutConstraint(item: ov, attribute: attribute, relatedBy: .equal, toItem: cameraView, attribute: attribute, multiplier: 1, constant: 0))
-    }
-
-    if let readerOverlayView = overlayView as? ReaderOverlayView {
-      readerOverlayView.rectOfInterest = builder.rectOfInterest
-    }
   }
 
   public override func layoutSubviews() {
     super.layoutSubviews()
-
-    reader?.previewLayer.frame = bounds
   }
 
   // MARK: - Scan Result Indication
 
   func startTimerForBorderReset() {
     DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) {
-      self.overlayView?.setState(.normal)
+      self.overlayLayer?.setState(.normal)
     }
   }
 
   func addRedBorder() {
     self.startTimerForBorderReset()
 
-    self.overlayView?.setState(.wrong)
+    self.overlayLayer?.setState(.wrong)
   }
 
   func addGreenBorder() {
     self.startTimerForBorderReset()
-    
-    self.overlayView?.setState(.valid)
+
+    self.overlayLayer?.setState(.valid)
   }
 
   @objc public func setNeedsUpdateOrientation() {
     setNeedsDisplay()
 
-    overlayView?.setNeedsDisplay()
+    overlayLayer?.setNeedsDisplay()
 
     if let connection = reader?.previewLayer.connection, connection.isVideoOrientationSupported {
       let application                    = UIApplication.shared
@@ -160,18 +153,18 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
   // MARK: - Convenience Methods
 
   private func addComponents() {
-    #if swift(>=4.2)
+#if swift(>=4.2)
     let notificationName = UIDevice.orientationDidChangeNotification
-    #else
+#else
     let notificationName = NSNotification.Name.UIDeviceOrientationDidChange
-    #endif
+#endif
 
     NotificationCenter.default.addObserver(self, selector: #selector(self.setNeedsUpdateOrientation), name: notificationName, object: nil)
 
     addSubview(cameraView)
 
-    if let ov = overlayView {
-      addSubview(ov)
+    if let ol = overlayLayer {
+      layer.addSublayer(ol)
     }
 
     if let scb = switchCameraButton {
@@ -181,14 +174,14 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
     if let ttb = toggleTorchButton {
       addSubview(ttb)
     }
-    
+
     if let cb = cancelButton {
       addSubview(cb)
     }
 
     if let reader = reader {
       cameraView.layer.insertSublayer(reader.previewLayer, at: 0)
-      
+
       setNeedsUpdateOrientation()
     }
   }
@@ -200,4 +193,46 @@ extension QRCodeReaderView: QRCodeReaderLifeCycleDelegate {
   }
 
   func readerDidStopScanning() {}
+
+  func updateCameraInputDimensions(dimensions: CMVideoDimensions?) {
+    guard let dimensions = dimensions else {
+      // Facllback
+      DispatchQueue.main.async {
+        // TODO: TBI
+      }
+      return
+    }
+    DispatchQueue.main.async {
+      // Adjust rect of intersect.
+      if let rectOfInterest = self.rectOfInterest {
+        // TODO: TBI
+        let adjustedRectOfInterest: CGRect = .zero
+        self.reader?.metadataOutput.rectOfInterest = adjustedRectOfInterest
+        (self.overlayLayer as? ReaderOverlayLayer)?.rectOfInterest = adjustedRectOfInterest
+      }
+
+      // Adjust preview size to visible rect.
+      let widthDimen = CGFloat(dimensions.width)
+      let heightDimen = CGFloat(dimensions.height)
+
+      let scale: CGFloat
+
+      let widthScale = self.bounds.width / widthDimen
+      let heightScale = self.bounds.height / heightDimen
+
+      if widthScale > heightScale {
+        scale = widthScale
+      } else {
+        scale = heightScale
+      }
+
+      let rect = CGRect(origin: .zero, size: .init(width: widthDimen * scale,
+                                                   height: heightDimen * scale))
+      self.reader?.previewLayer.frame = rect
+      self.overlayLayer?.bounds = rect
+      self.overlayLayer?.position = .init(x: CGRectGetMidX(self.bounds),
+                                          y: CGRectGetMidY(self.bounds))
+      self.overlayLayer?.drawOverlay()
+    }
+  }
 }

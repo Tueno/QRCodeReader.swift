@@ -30,6 +30,7 @@ import AVFoundation
 protocol QRCodeReaderLifeCycleDelegate: class {
   func readerDidStartScanning()
   func readerDidStopScanning()
+  func updateCameraInputDimensions(dimensions: CMVideoDimensions?)
 }
 
 /// Reader object base on the `AVCaptureDevice` to read / scan 1D and 2D codes.
@@ -145,15 +146,17 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
       session.removeInput(input)
     }
 
-    // Add video input
+    var input: AVCaptureDeviceInput?
     switch withCaptureDevicePosition {
     case .front:
       if let _frontDeviceInput = frontDeviceInput {
         session.addInput(_frontDeviceInput)
+        input = _frontDeviceInput
       }
     default:
       if let _defaultDeviceInput = defaultDeviceInput {
         session.addInput(_defaultDeviceInput)
+        input = _defaultDeviceInput
       }
     }
 
@@ -169,6 +172,8 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
     metadataOutput.metadataObjectTypes = filtered
     previewLayer.videoGravity          = .resizeAspectFill
 
+    lifeCycleDelegate?.updateCameraInputDimensions(dimensions: input?.dimensions)
+
     session.commitConfiguration()
   }
 
@@ -183,6 +188,8 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
 
         let newDeviceInput = (_currentInput.device.position == .front) ? defaultDeviceInput : _frontDeviceInput
         session.addInput(newDeviceInput!)
+
+        lifeCycleDelegate?.updateCameraInputDimensions(dimensions: newDeviceInput!.dimensions)
       }
 
       session.commitConfiguration()
@@ -410,3 +417,17 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
     }
   }
 }
+
+private extension AVCaptureInput {
+    var dimensions: CMVideoDimensions? {
+        if let captureInput = self as? AVCaptureDeviceInput {
+            let dimensions = CMVideoFormatDescriptionGetDimensions(
+              captureInput.device.activeFormat.formatDescription
+            )
+            print("Input Dimensions: \(dimensions)")
+            return dimensions
+        }
+        return nil
+    }
+}
+

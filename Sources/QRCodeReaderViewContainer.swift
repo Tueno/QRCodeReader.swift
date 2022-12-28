@@ -41,7 +41,7 @@ public protocol QRCodeReaderDisplayable {
   var toggleTorchButton: UIButton? { get }
 
   /// A guide view upon the camera view
-  var overlayView: QRCodeReaderViewOverlay? { get }
+  var overlayLayer: QRCodeReaderViewOverlay? { get }
 
   /// Notify the receiver to update its orientation.
   func setNeedsUpdateOrientation()

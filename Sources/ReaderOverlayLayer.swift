@@ -37,13 +37,14 @@ public enum QRCodeReaderViewOverlayState {
 }
 
 /// The overlay protocol
-public protocol QRCodeReaderViewOverlay: UIView {
+public protocol QRCodeReaderViewOverlay: CALayer {
   /// Set the state of the overlay
   func setState(_ state: QRCodeReaderViewOverlayState)
+  func drawOverlay()
 }
 
 /// Overlay over the camera view to display the area (a square) where to scan the code.
-public final class ReaderOverlayView: UIView {
+public final class ReaderOverlayLayer: CALayer {
   private var overlay: CAShapeLayer = {
     var overlay             = CAShapeLayer()
     overlay.backgroundColor = UIColor.clear.cgColor
@@ -55,68 +56,73 @@ public final class ReaderOverlayView: UIView {
 
     return overlay
   }()
-  
+
   private var state: QRCodeReaderViewOverlayState = .normal {
     didSet {
       switch state {
       case .normal:
-        overlay.strokeColor = defaultColor.cgColor
+        overlay.strokeColor = defaultColor
       case .valid:
-        overlay.strokeColor = highlightValidColor.cgColor
+        overlay.strokeColor = highlightValidColor
       case .wrong:
-        overlay.strokeColor = highlightWrongColor.cgColor
+        overlay.strokeColor = highlightWrongColor
       }
-      
+
       setNeedsDisplay()
     }
   }
-  
+
   /// The default overlay color
-  public var defaultColor: UIColor = .white
-  
+  public var defaultColor: CGColor = UIColor.white.cgColor
+
   /// The overlay color when a valid code has been scanned
-  public var highlightValidColor: UIColor = .green
-  
+  public var highlightValidColor: CGColor = UIColor.green.cgColor
+
   /// The overlay color when a wrong code has been scanned
-  public var highlightWrongColor: UIColor = .red
+  public var highlightWrongColor: CGColor = UIColor.red.cgColor
 
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-
+  public override init(layer: Any) {
+    super.init(layer: layer)
     setupOverlay()
   }
 
-  required public init?(coder aDecoder: NSCoder) {
-    super.init(coder: aDecoder)
-
+  public override init() {
+    super.init()
     setupOverlay()
   }
 
-  private func setupOverlay() {
-    state = .normal
-    
-    layer.addSublayer(overlay)
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
   }
 
-  var rectOfInterest: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1) {
-    didSet {
-      setNeedsDisplay()
-    }
-  }
-
-  public override func draw(_ rect: CGRect) {
+  public func drawOverlay() {
+    overlay.bounds = bounds
+    overlay.position = .init(x: CGRectGetMidX(bounds),
+                             y: CGRectGetMidY(bounds))
     let innerRect = CGRect(
-      x: rect.width * rectOfInterest.minX,
-      y: rect.height * rectOfInterest.minY,
-      width: rect.width * rectOfInterest.width,
-      height: rect.height * rectOfInterest.height
+      x: bounds.width * rectOfInterest.minX,
+      y: bounds.height * rectOfInterest.minY,
+      width: bounds.width * rectOfInterest.width,
+      height: bounds.height * rectOfInterest.height
     )
 
     overlay.path = UIBezierPath(roundedRect: innerRect, cornerRadius: 5).cgPath
   }
+
+  private func setupOverlay() {
+    state = .normal
+    addSublayer(overlay)
+  }
+
+  var rectOfInterest: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1) {
+    didSet {
+      drawOverlay()
+    }
+  }
 }
 
-extension ReaderOverlayView: QRCodeReaderViewOverlay {
+extension ReaderOverlayLayer: QRCodeReaderViewOverlay {
   public func setState(_ state: QRCodeReaderViewOverlayState) {
     self.state = state
   }
