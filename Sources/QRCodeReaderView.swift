@@ -110,6 +110,11 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-[ttb(50)]", options: [], metrics: nil, views: views))
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[ttb(70)]", options: [], metrics: nil, views: views))
     }
+
+    // TODO: dimensionsに伴って調整するように変更した後に削除
+    if let readerOverlayView = overlayLayer as? ReaderOverlayLayer {
+      readerOverlayView.rectOfInterest = builder.rectOfInterest
+    }
   }
 
   public override func layoutSubviews() {
@@ -206,9 +211,9 @@ extension QRCodeReaderView: QRCodeReaderLifeCycleDelegate {
       // Adjust rect of intersect.
       if let rectOfInterest = self.rectOfInterest {
         // TODO: TBI
-        let adjustedRectOfInterest: CGRect = .zero
-        self.reader?.metadataOutput.rectOfInterest = adjustedRectOfInterest
-        (self.overlayLayer as? ReaderOverlayLayer)?.rectOfInterest = adjustedRectOfInterest
+//        let adjustedRectOfInterest: CGRect = .zero
+//        self.reader?.metadataOutput.rectOfInterest = adjustedRectOfInterest
+//        (self.overlayLayer as? ReaderOverlayLayer)?.rectOfInterest = adjustedRectOfInterest
       }
 
       // Adjust preview size to visible rect.
